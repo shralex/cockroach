@@ -1,0 +1,122 @@
+# Run a V2 membership change that removes the leader and adds another voter as
+# a single operation, using joint consensus and explicitly determining when to
+# transition out of the joint config. Leadership is transferred to new joiner
+# while in the joint config. After the reconfiguration completes, we verify
+# that the removed leader cannot campaign to become leader.
+
+log-level none
+----
+ok
+
+# Bootstrap n1, n2, n3.
+add-nodes 3 voters=(1,2,3) index=2
+----
+ok
+
+# n1 campaigns to become leader
+campaign 1
+----
+ok
+
+stabilize
+----
+ok (quiet)
+
+log-level info
+----
+ok
+
+raft-state
+----
+1 :  StateLeader (Voter)
+2 :  StateFollower (Voter)
+3 :  StateFollower (Voter)
+
+log-level none
+----
+ok
+
+# create n4
+add-nodes 1
+----
+ok
+
+# Start reconfiguration to remove n1 and add n4
+propose-conf-change 1 v1=false transition=explicit
+r1 v4
+----
+ok
+
+# Enter joint config
+stabilize
+----
+ok (quiet)
+
+# Transfer leadership while in the joint config
+transfer-leadership from=1 to=4
+----
+ok
+
+log-level info
+----
+ok
+
+# Leadership transfer wasn't processed yet
+raft-state
+----
+1 :  StateLeader (Voter)
+2 :  StateFollower (Voter)
+3 :  StateFollower (Voter)
+4 :  StateFollower (Voter)
+
+log-level none
+----
+ok
+
+# Leadership transfer is happening here
+stabilize
+----
+ok (quiet)
+
+log-level info
+----
+ok
+
+# Leadership transfer succeeded
+raft-state
+----
+1 :  StateFollower (Voter)
+2 :  StateFollower (Voter)
+3 :  StateFollower (Voter)
+4 :  StateLeader (Voter)
+
+log-level none
+----
+ok
+
+# Propose a transition out of the joint config.
+propose-conf-change 1
+----
+ok
+
+# The group commits the command and everyone switches to the final config.
+stabilize
+----
+ok (quiet)
+
+log-level info
+----
+ok
+
+# Leadership transfer succeeded
+raft-state
+----
+1 :  StateFollower (Non-Voter)
+2 :  StateFollower (Voter)
+3 :  StateFollower (Voter)
+4 :  StateLeader (Voter)
+
+# Make sure n1 cannot campaign to become leader
+campaign 1
+----
+WARN 1 is unpromotable and can not campaign; ignoring MsgHup
